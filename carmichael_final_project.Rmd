@@ -1,0 +1,300 @@
+---
+title: "How Extreme Weather Influences Perceptions Of Climate Change"
+author: "Ali Carmichael"
+subtitle: "BI410 Data Visualization"
+date: "2025-06-09"
+output:
+  html_document: default
+  pdf_document: default
+---
+## Literature Review
+  
+  Climate change is no longer a future problem; the effects of increased carbon emissions from human activity are having widespread effects on the environment (NASA). Here are some of the ways climate change is affecting our planet: increased global temperatures, increased drought and decreased snowpack, challenges with global food supply, increased risk to human health, increased sea levels, and overall damage to ecosystems and their organisms (National Oceanic and Atmospheric Administration, NOAA).
+  
+  Several other similar studies have been done in the past, most of which were conducted in the UK or were focused on the amount of people were willing to pay in tax dollars for climate change policies. One study conducted by Gould et al. sought to understand how extreme weather events influence climate policy support in the U.S. using self-reports and weather data (Gould et al., 2024). Another similar study was done in the UK, where survey data were collected to examine the link between experience with flood disasters and perceptions of climate change (Spence et al., 2011). The National Centers for Environmental Information provides data on severe weather, where you can find detailed information on intense thunderstorms, hailstorms, tornadoes, and blizzards (National Centers for Environmental Information). The National Oceanic and Atmospheric Administration also provides weather data like global temperature, which would be useful to draw patterns from to determine which years saw a higher increase in global temperature that could influence people’s views on climate change (National Oceanic and Atmospheric Administration, NOAA). 
+  
+  The data I will be using is data from the Yale Program on Climate Change Communication & George Mason University Center for Climate Change. It consists of national survey data on public opinions of climate change that contains climate change beliefs and attitudes, risk perceptions, policy preferences, and information acquisition behaviors from 2008-2023, found here: https://osf.io/jw79p/. I will also be using weather data from the National Center for Environmental Information (NCEI) that consists of U.S. disaster cost assessments of damage inflicted by: tropical cyclones, inland floods, drought, severe local storms (i.e., tornado, hail, straight-line wind damage), wildfires, crop freeze events and winter storms, found here: https://www.ncei.noaa.gov/access/billions/events/. This question can help understand the motivations for what most impacts a person’s decision on climate change policy and who they decide to vote for. The Trump administration in the past has issued an executive order aimed at dismantling key climate actions like the Clean Power Plan, Emission Standard for New Power Plants, Methan Regulations, and Environmental Reviews, we can expect that similar actions will be taken in the future of his second term of presidency (Columbia Law School). With the effects of climate change not expected to slow anytime soon, now is an important time to understand what might influence someone’s decision on climate change policies. 
+  
+  I predict that in years where there were extreme weather events or climate disasters, there will be an increase in risk perceptions of climate change and a shift in policy preferences towards democratic candidates, however, I don’t think this will be a long lasting effect, and it will probably even out in years where there were less extreme weather events. This pattern was found in other similar studies like Fritz et al., where they found that global trends showed that climate harm and worry about climate change are good indicators of the support for climate change policies (Fritz et al., 2024). In another study done specifically about experiences with flood disasters, the authors found that those who reported personal experience of flooding expressed more concern over climate change and felt more confident in their ability to act on and reduce energy usage (Spence et al., 2011). The study done by Visconti et al. found slightly different results where only wildfires seemed to show a significant influence in a person’s concern for climate change and climate change policies (Visconti et al., 2024). 
+
+## Work Flow
+1. Load packages needed for analysis. (haven, tidyverse, anytime, labelled).
+2. Load in data using the Haven package and store as a data frame converting the climate change survey data into text instead of response numbers.
+3. Count the responses for if people believe in climate change by year and create an initial visualization using a stacked barplot.
+4. Create a climate change statistic data frame selecting just the columns used to determine climate change perception. (year, worry, harm to the future generation, regulations, and research funding).
+5. Load in weather data as a csv and store as a data frame. 
+5. Convert the Date column to Datetime using the anytime package.
+6. Subset to just the years that are found in the climate change data set.
+7. Select just the columns you will need for visualizations. (year, disaster name, disaster type, number of deaths, cost).
+8. Create initial visualizations to visualize cost and deaths over time and the number of disasters for each disaster type.
+9. Filter the data set to calculate the most common weather for each year, the most expensive weather type for each year, and the deadliest weather type for each year and plot.
+10. Filter the data to find the top three years with the most weather events, the most cost in damage, and the most deaths.
+11. Calculate the percentage of survey responses to each question each year
+12. Create an area plot that shows response percentages by question and plots lines for the years with the most damage, deaths, and weather.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(haven)
+library(tidyverse)
+library(anytime)
+library(labelled)
+
+climate_change_raw <- read_spss("data/climate_change.sav")
+weather_dat <- read_csv("data/weather_disaster_data_1980-2024.csv", skip=2)
+
+head(climate_change_raw)
+head(weather_dat)
+```
+
+```{r}
+climate_change_dat <- as.data.frame(lapply(climate_change_raw, to_factor)) # format .sav to display the text instead of just numbers
+head(climate_change_dat)
+```
+
+```{r fig.height=10, fig.width=12}
+climate_beliefs <- climate_change_dat %>%  
+  group_by(year, happening) %>% # group by year and if climate change is happening 
+  summarize(count = n()) # count how many answers for each survey response each year
+
+ggplot(climate_beliefs, aes(x = year, y = count, fill = happening)) + geom_bar(stat = "identity") + # bar plot to see survey responses for each year
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), color = "white") + # label each bar with the count for each response
+  labs(
+    title = "Views On If Climate Change Is Happening From 2008 to 2023",
+    x = "Year",
+    y = "Count",
+    fill = "Beliefs On Climate Change"
+  ) + scale_fill_viridis_d(direction = -1) + theme_minimal() # color change for better understanding
+```
+
+```{r fig.height=10, fig.width=12}
+climate_belief_stats <- climate_change_dat %>% # create a new statistics data frame
+  select(year, happening, worry, harm_future_gen, reg_CO2_pollutant, reg_utilities, fund_research) %>% # select columns that are best for understanding climate change perceptions
+  na.omit() %>% # Can't plot NA values so get rid of all rows in the data frame with NA 
+  pivot_longer( 
+    cols = -year, # keep year as is 
+    names_to = "survey_question", # take the survey questions and turn them into one column with each question as a value
+    values_to = "survey_response" # turn the responses into one column corresponding with survey question
+  ) %>% 
+  count(year, survey_question, survey_response, name = "count") # count the number of responses to each question each year
+
+ggplot(climate_belief_stats, aes(x = year, y = count, fill = survey_response)) + geom_bar(stat = "identity") + # bar plot to see the responses to each question each year
+  facet_wrap(~survey_question, labeller = labeller(survey_question = c("fund_research" = "Funding Research", "happening" = "Is Climate Change Happening?", "harm_future_gen" = "Harm To Future Generations", "reg_CO2_pollutant" = "Regulate CO2", "reg_utilities" = "Regulate Utilities", "worry" = "Climate Change Worry"))) + # split plots by survey question
+  labs(
+    title = "Climate Change Beliefs From 2008 to 2020",
+    x = "Year",
+    y = "Count",
+    fill = "Survey Question Response"
+  ) + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
+  scale_fill_viridis_d(option = "plasma") # color change for better understanding 
+```
+
+```{r}
+weather_dat$`Begin Date` <- anytime::anydate(weather_dat$`Begin Date`) # change to date time
+weather_dat$`End Date` <- anytime::anydate(weather_dat$`End Date`) # change to date time
+
+weather_dat <- weather_dat %>% 
+  mutate(
+    year = year(`Begin Date`), # make a year column
+    Month = month(`Begin Date`), # make a month column
+    Day = day(`Begin Date`) # make a day column
+  ) %>% 
+  filter(year > 2007 & year < 2025) %>% # filter for just the years that are in the climate change data 
+  select(Name, Disaster, year, Deaths, `CPI-Adjusted Cost`) %>% # select the columns that are necessary to answer the original question
+  mutate(Cost = `CPI-Adjusted Cost`/ 1000) # change cost so it is represented as billions
+```
+
+```{r fig.height=10, fig.width=12}
+ggplot(weather_dat, aes(x = year, y = Cost, color = Disaster)) + geom_line() + geom_point() + facet_wrap(~Disaster, scales = "free_y") + # plot cost of events over time by weather event
+  labs(
+    title = "Extreme Weather Events By Cost From 2008 to 2025",
+    x = "Year",
+    y = "Cost (Billions USD)"
+  ) + theme_light() + scale_color_viridis_d(direction = -1) # color change for better understanding
+```
+
+```{r fig.height=10, fig.width=12}
+ggplot(weather_dat, aes(x = year, y = Deaths, color = Disaster)) + geom_line() + geom_point() + facet_wrap(~Disaster, scales = "free_y") + # plot deaths over time by disaster type
+  labs(
+    title = "Extreme Weather Events By Cost From 2008 to 2025",
+    x = "Year",
+    y = "Deaths"
+  ) + theme_light() + scale_color_viridis_d(direction = -1)
+```
+
+```{r fig.height=10, fig.width=12}
+num_disasters <- weather_dat %>% 
+  group_by(Disaster) %>% 
+  summarize(count = n()) # calculate the number of disasters in the data set
+
+ggplot(num_disasters, aes(x = Disaster, y = count, fill = Disaster)) + geom_bar(stat = "identity") + # plot the number using a bar plot 
+  labs(
+    title = "Number of Extreme Weather Events From 2008 to 2025",
+    x = "Disaster Type",
+    y = "Count"
+  ) + theme_minimal()
+```
+
+```{r fig.height=10, fig.width=12}
+most_common_weather <- weather_dat %>% 
+  filter(Disaster != "Severe Storm") %>% # filter out severe storm because it's the most common and not very descriptive
+  group_by(Disaster, year) %>% 
+  summarize(count = n()) %>% # count the number of weather events for each year and each disaster type
+  group_by(year) %>% 
+  filter(count == max(count)) # find the most common weather type for each year
+
+ggplot(most_common_weather, aes(x = year, y = count, fill = Disaster)) + geom_bar(stat = "identity") + # plot using a bar plot to show the weather type for each year
+  labs(
+    title = "Most Common Weather Event From 2008 to 2025",
+    x = "Year",
+    y = "Count"
+  ) + theme_minimal() + scale_fill_viridis_d(direction = -1, option = "mako") # color change for better understanding
+```
+
+```{r fig.height=10, fig.width=12}
+most_expensive_weather <- weather_dat %>% 
+  group_by(year) %>% 
+  filter(Cost == max(Cost, na.rm = T)) # find the most expensive weather event for each year
+
+ggplot(most_expensive_weather, aes(x = year, y = Cost, fill = Name)) + geom_bar(stat = "identity") + # plot the weather event by name 
+  labs(
+    title = "Most Expensive Weather Event From 2008 to 2025",
+    x = "Year",
+    y = "Cost (Billions)"
+  ) + theme_minimal()
+```
+
+```{r fig.height=10, fig.width=12}
+deadliest_weather <- weather_dat %>% 
+  group_by(year) %>% 
+  filter(Deaths == max(Deaths, na.rm = T)) # find the weather event with the most amount of deaths each year
+
+ggplot(deadliest_weather, aes(x = year, y = Deaths, fill = Name)) + geom_bar(stat = "identity") + # plot the weather events by name and year
+  labs(
+    title = "Deadliest Weather Event From 2008 to 2025",
+    x = "Year",
+    y = "Deaths"
+  ) + theme_minimal()
+```
+
+```{r}
+top_3_weather_years <- weather_dat %>%
+  filter(year > 2007 & year < 2021) %>% # filter for just the years in the climate change data
+  group_by(year) %>%
+  summarize(weather_event_count = n()) %>% # count the number of weather events each year
+  arrange(desc(weather_event_count)) %>% # sort them
+  slice_head(n = 3) # select the years with the most extreme weather
+
+top_3_expense_years <- weather_dat %>% 
+  filter(year > 2007 & year < 2021) %>% # filter for just the years in the climate change data
+  group_by(year) %>% 
+  summarize(total_damage_cost = sum(Cost, na.rm = T)) %>% # calculate the total damage by cost for each year
+  arrange(desc(total_damage_cost)) %>% # sort the cost
+  slice_head(n = 3) # select the years with the most damage 
+
+top_3_deadliest_years <- weather_dat %>% 
+  filter(year > 2007 & year < 2021) %>% # filter for just the years in the climate change data
+  group_by(year) %>% 
+  summarize(total_deaths = sum(Deaths, na.rm = T)) %>% # calculate the total number of deaths each year due to weather
+  arrange(desc(total_deaths)) %>% # sort the number of deaths
+  slice_head(n = 3) # take the years with the highest amount of deaths
+```
+
+```{r}
+# I got help with chatgpt here because I was having issues trying to plot all of this below I will comment where and what I got help with.
+
+common_dat <- top_3_weather_years %>% mutate(type = "Most Weather") # new df with a column called "type" that assigns each entry "most weather"
+expensive_dat <- top_3_expense_years %>%  mutate(type = "Most Expensive")  # new df with a column called "type" that assigns each entry "most expensive"
+deadliest_dat <- top_3_deadliest_years %>% mutate(type = "Deadliest")  # new df with a column called "type" that assigns each entry "deadliest"
+
+weather_event_years <- bind_rows(common_dat, expensive_dat, deadliest_dat) %>% # combined the df above into one df by binding the rows
+  select(year, type) %>% # just take year and type 
+  distinct() # removes any duplicates got help from chatgpt here because I was getting an error I didn't understand due to multiple rows having the same value
+
+belief_percent <- climate_belief_stats %>% 
+  group_by(year, survey_question) %>% 
+  mutate(percent = round(count / sum(count) * 100, 2)) # here just turning survey responses into percentages for each question response for each year
+
+belief_percent$year <- as.numeric(as.character(belief_percent$year)) # turning the year into a numeric value. Got help here too because I was getting weird errors I didn't understand when I was trying to plot below. I'm not really sure how this fixed the issue but I understand that I'm making sure that year is a numeric data type. 
+weather_event_years$year <- as.numeric(as.character(weather_event_years$year))
+belief_percent <- belief_percent %>% filter(!is.na(percent)) # getting rid of NA values because my plot wasn't showing up 
+```
+
+```{r fig.height=10, fig.width=12}
+ggplot(belief_percent, aes(x = year, y = percent, fill = survey_response)) +  
+  geom_area() + # plot the survey response percentages as an area plot
+  facet_wrap(~survey_question, labeller = labeller(survey_question = c("fund_research" = "Funding Research", "happening" = "Is Climate Change Happening?", "harm_future_gen" = "Harm To Future Generations", "reg_CO2_pollutant" = "Regulate CO2", "reg_utilities" = "Regulate Utilities", "worry" = "Climate Change Worry"))) + # split each plot up by question and rename them
+  geom_vline(data = weather_event_years, aes(xintercept = year + as.numeric(factor(type)) * 0.15, color = type), linetype = "solid", size = 1, alpha = 0.7, show.legend = TRUE) + # vertical lines to show extreme weather events, got help here too because the lines were overlapping and you couldn't see and chatgpt told me to add noise so I did this which I've done in another project for a different class.
+  scale_color_manual(values = c("Most Weather" = "green", "Most Expensive" = "red", "Deadliest" = "black")) + # manually setting the vertical line colors
+  labs(
+    title = "Climate Change Perceptions Vs. Extreme Weather Events (2008-2023)",
+    x = "Year",
+    y = "Answer Percentages",
+    fill = "Survey Response",
+    color = "Weather Event"
+  ) + 
+  scale_x_continuous(breaks = seq(from = 2008, to = 2020, by = 1 )) + # set x-axis scale
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + scale_fill_viridis_d() # change color for better understanding.
+
+# I know this plot is not the prettiest but I really tried my best here haha. This took me so long because I was having so many issues plotting and creating the lines and also just filtering my data for the top 3 years for each weather event situation. I want to see if I can somehow make this prettier but I ran out of time so I will have to turn it in kind of ugly sorry!
+```
+
+## Results
+
+  In 2011 and 2012 the amount of people who somewhat supported or strongly supported research increased until around 2018 where it plateaued. The percentage of people who somewhat opposed funding research sharply decreased after 2012 before increasing again in the years following. The percentage of people who believe climate change is happening as fluctuated throughout the years and shows no clear trend or correlation to years with extreme weather. The percentage of people who believe there is either a great deal or a moderate amount of harm from climate change to future generations showed a decreasing trend prior to 2011 before increasing after 2011 and through 2012 before eventually decreasing again around 2014, then increasing around 2016 and continuing to increase through 2017 beforing slightly declining again in later years. The percentage of people who believe there is only a little or no harm at all to the future generation shows a trend of increasing before extreme weather years and then dropping off after that year and then immediately spiking again in following years. Responses to the question of whether CO2 should be regulated all showed similar trends where they decreased before 2011 and then lagged before spiking after 2013, after 2017 response percentages mostly plateaued with small fluctuations in 2019. The percentage of people who strongly support regulation of utilities increased after 2012 after a previous trend of decreasing, similar trends are shown in the percentage of people who somewhat support regulation but with more fluctuations around 2011-2012 and 2015-2016. The percentage of people who somewhat oppose and strongly oppose show no clear correlation and have the tendency to fluctuate over time, the percentage of people who somewhat oppose regulation did decrease after 2011 for a short period. Last, the percentage of people who are very worried and somewhat worried about climate change increased in 2015 while those who are not very or not at all worried about climate change show fluctuations overtime. 
+
+## Discussion
+
+  Survey questions like whether a person supported funding research, the assessment of harm to future generations, regulation of utilities and CO2, and worry about climate change showed a possible correlation with extreme weather events. In particular in years that had the most expenses due to damages caused by extreme weather and the most deaths. The years with the most weather events seem to show less correlation than those other years. Most of the survey questions showed a lag where responses increased slowly after years where there was high costs or death rates and percentages had a steady increase for many years before dropping off slightly in more recent years. Interestingly, responses to whether a person believed in climate change peaked in years with extreme weather events but then quickly declined after, showing a different trend than the other survey questions. 
+  
+  Some of the trends found in my project supported my hypothesis that climate change and risk perceptions would increase in years following an extreme weather event but then decrease in later years. interestingly, I didn't account for the lag where responses in favor of regulations/funding, and extreme harm and worry steadily increased following years with extreme weather, in particular, years with the most damage done. Similar trends were seen in Visconti & Young, where they examined the effect of exposure to weather events like floods, hurricanes, severe storms, and wildfires on climate change beliefs and the impact on policy action. The authors of this study found that only wildfires showed a significant impact that was not long lasting, disappearing one year after exposure (Visconti et al., 2024). 
+  
+  Another interesting finding in this project was that the percentage of people that believed in climate change peaked in years with extreme weather and showed more fluctuation than other survey questions. A possible explanation for this could be that many people don't see extreme weather as evidence for climate change. In years that weather events caused more damage and death there could've been an increase because people could witness the direct impact of climate change or these trends could be unrelated and that's why there is more fluctuations in the response percentages for climate change belief throughout the years. In a study done by the PEW research center on American citizens beliefs on climate change, researchers found that many respondents said that extreme weather events are natural occurrences that have not become more frequent or harmful due to climate change. They also found that most of the 32 people that they interviewed perceived climate crisis as an exaggeration (Funk et al., 2023).
+
+  One of the limitations of this study is that the climate change survey data from the Yale Program on Climate Change Communication & George Mason University Center for Climate Change is recorded from different respondents each year. The data is not tracked across years so there may be some years where more people respond skewing the data. This could make it appear that there are trends where some years center answers were given more than other but really it is just because there was a bigger sample that year. Another limitation is the weather date didn't give much explanation into the extreme weather other than the name of the event, the type, the damage cost, and the deaths. It is also harder to assess the impact of extreme weather on a global scale because certain weather events like hurricanes and floods only happen in one geographical location so their impact in areas that are not affected might be less. It would be more meaningful to look at the impact at a state level but data like this is hard to obtain and difficult to do analysis on, I think this could be a good future direction for this project if there was more time as well as unlimited resources. I also think it would be interesting to examine demographics along with extreme weather and climate change perception to understand what communities might be impacted more by extreme weather. 
+  
+  In conclusion, some correlations between climate change perceptions like willingness to support research and regulations as well as views of future harm and worry show correlations with years where extreme weather events caused large amounts of costly damage and death. While it's hard to tell whether these correlations have any significant meaning without further analysis, visual trends show an interesting relationship that warrants further exploration. According to NASA, since 1950, the frequency and intensity of heat extremes have increased and it's primarily due to human-caused increase in greenhouse gas emissions. As the planet continues to warm, these events will only become more extreme and intense (NASA, 2024). It's important to understand what may influence a persons perception of climate change, especially when it comes to motivating people to take action and vote. It's also important in understanding how we can effectively communicate new research and findings about climate change in a depolarizing way (Yale School of The Environment, 2024). Climate change is no longer a distant threat, understanding what influences a persons beliefs and perceptions on climate change is important to providing effective solutions that will benefit all of us. 
+  
+## Works Cited
+
+1. What to know about Trump’s first executive actions on climate and environment. AP News https://apnews.com/article/trump-executive-orders-climate-change-environmental-policy-e4fb2b2495c0bcf880fab46605936b09 (2025).
+
+2. The Link Between Climate Change and Extreme Weather. https://environment.yale.edu/news/article/link-between-climate-change-and-extreme-weather (2024).
+
+3. Effects - NASA Science. https://science.nasa.gov/climate-change/effects/ (2022).
+
+4. Trump Issues Executive Order on Climate Change | Sabin Center for Climate Change Law. https://climate.law.columbia.edu/content/trump-issues-executive-order-climate-change-0.
+
+5. Severe Weather | National Centers for Environmental Information (NCEI). https://www.ncei.noaa.gov/products/severe-weather.
+
+6. Climate change impacts | National Oceanic and Atmospheric Administration. https://www.noaa.gov/education/resource-collections/climate/climate-change-impacts.
+
+7. Visconti, G. & Young, K. The effect of different extreme weather events on attitudes toward climate change. PLOS ONE 19, (2024).
+
+8. Spence, A., Poortinga, W., Butler, C. & Pidgeon, N. F. Perceptions of climate change and willingness to save energy related to flood experience. Nature Climate Change 1, 46–49 (2011).
+
+9. Poortinga, W., Demski, C. & Steentjes, K. Generational differences in climate-related beliefs, risk perceptions and emotions in the UK. Communications Earth & Environment 4, 229 (2023).
+
+10. Mase, A. S., Gramig, B. M. & Prokopy, L. S. Climate change beliefs, risk perceptions, and adaptation behavior among Midwestern U.S. crop farmers. Climate Risk Management 15, 8–17 (2017).
+
+11. Hai, Z. & Perlman, R. L. Extreme weather events and the politics of climate change attribution. Science Advances 8, eabo2190.
+
+12. Gould, R. K., Shrum, T. R., Ramirez Harrington, D. & Iglesias, V. Experience with extreme weather events increases willingness-to-pay for climate mitigation policy. Global Environmental Change 85, 102795 (2024).
+
+13. Fritz, L., Baum, C. M., Brutschin, E., Low, S. & Sovacool, B. K. Climate beliefs, climate technologies and transformation pathways: Contextualizing public perceptions in 22 countries. Global Environmental Change 87, 102880 (2024).
+
+14. Dietz, T. Political events and public views on climate change. Climatic Change 161, 1–8 (2020).
+
+15. Capstick, S., Whitmarsh, L., Poortinga, W., Pidgeon, N. & Upham, P. International trends in public perceptions of climate change over the past quarter century. WIREs Climate Change 6, 35–61 (2015).
+
+16. Binelli, C., Loveless, M. & Schaffner, B. F. Explaining Perceptions of Climate Change in the US. Political Research Quarterly 76, 365–380 (2023).
+
+17. Extreme Weather - NASA Science. https://science.nasa.gov/climate-change/extreme-weather/ (2023).
+
+18. Funk, G. P., Alison Spencer, Alec Tyson and Cary. Why Some Americans Do Not See Urgency on Climate Change. Pew Research Center https://www.pewresearch.org/science/2023/08/09/why-some-americans-do-not-see-urgency-on-climate-change/ (2023).
+

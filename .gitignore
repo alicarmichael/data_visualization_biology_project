@@ -1,0 +1,19 @@
+# Ignore everything by default
+*
+
+# Allow directories (needed so Git can traverse)
+!*/
+
+# Allow the data folder and its contents
+!data/**
+!data/
+
+# Allow specific project files
+!annotated_bibliography_carmichael.pdf
+!annotated_bibliography_carmichael.Rmd
+!carmichael_final_project_2.html
+!carmichael_final_project.Rmd
+
+# Allow .gitignore itself
+!.gitignore
+
